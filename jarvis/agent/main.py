@@ -78,6 +78,11 @@ class Jarvis:
             else "no model key — routing falls back to file-scoring",
         }
 
+    def voice_status(self) -> dict:
+        if voice_mod is not None and hasattr(voice_mod, "available"):
+            return voice_mod.available()
+        return {"available": False, "reason": "voice module not loaded"}
+
 
 JARVIS = Jarvis()
 
@@ -134,6 +139,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._serve_file(target)
             elif route == "/api/source":
                 self._json({**JARVIS.source, "model": JARVIS.model_status(),
+                            "voice": JARVIS.voice_status(),
                             "count": len(JARVIS.vault.notes)})
             elif route == "/api/graph":
                 self._json(JARVIS.vault.graph_payload())

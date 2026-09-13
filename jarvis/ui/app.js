@@ -4,6 +4,13 @@
 (function () {
   "use strict";
 
+  // ---- voice turn-taking tunables (tune these) ----
+  const SILENCE_THRESHOLD = 0.018; // mic RMS (0..1) below this counts as quiet
+  const SILENCE_MS = 900;          // quiet for this long ends the turn
+  const MIN_SPEECH_MS = 350;       // need at least this much speech first
+  const LEVEL_INTERVAL_MS = 60;    // level loop uses setInterval, NOT rAF, so a
+                                   // backgrounded tab never goes silently deaf
+
   const $ = (s) => document.querySelector(s);
   const api = async (path, opts) => {
     const r = await fetch(path, opts);
@@ -26,6 +33,7 @@
 
   let graph = null;
   let allTypes = {};
+  let voiceAvailable = false;
 
   function toast(msg) {
     const t = $("#toast");
@@ -109,6 +117,10 @@
         mb.className = "badge bad";
         mb.title = s.model.reason;
       } else { mb.hidden = true; }
+      voiceAvailable = !!(s.voice && s.voice.available);
+      if (!voiceAvailable) {
+        $("#btn-mic").title = (s.voice && s.voice.reason) || "voice off";
+      }
     } catch (e) { toast("Could not read source status: " + e.message); }
   }
 
@@ -211,6 +223,217 @@
     inp.placeholder = EXAMPLES[0];
   }
 
+  // ---------- voice ----------
+  // Continuous turn-taking: press mic once, then talk. Silence ends each turn;
+  // the mic goes deaf while JARVIS speaks so it never transcribes itself.
+  const voice = {
+    session: false,      // is a listening session active?
+    stream: null,
+    ctx: null,
+    analyser: null,
+    recorder: null,
+    chunks: [],
+    levelTimer: null,
+    silenceFor: 0,
+    speechFor: 0,
+    speaking: false,     // TTS is playing -> mic deaf
+    audioEl: null,
+    bars: null,
+  };
+
+  async function startSession() {
+    if (voice.session) return;
+    if (!voiceAvailable) {
+      toast("Voice is off — set ELEVENLABS_API_KEY on the server. Text still works.");
+      return;
+    }
+    try {
+      voice.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      // A blocked mic is the most confusing failure — say so loudly.
+      toast("Microphone blocked or unavailable: " + e.message + ". Check the browser's site permissions.");
+      setReactor("idle");
+      return;
+    }
+    voice.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = voice.ctx.createMediaStreamSource(voice.stream);
+    voice.analyser = voice.ctx.createAnalyser();
+    voice.analyser.fftSize = 512;
+    src.connect(voice.analyser);
+    voice.bars = [...document.querySelectorAll("#bars span")];
+    voice.session = true;
+    $("#btn-mic").classList.add("active");
+    $("#bars").classList.add("on");
+    beginTurn();
+  }
+
+  function stopSession() {
+    voice.session = false;
+    stopTurn(false);
+    stopSpeaking();
+    if (voice.levelTimer) { clearInterval(voice.levelTimer); voice.levelTimer = null; }
+    if (voice.stream) { voice.stream.getTracks().forEach((t) => t.stop()); voice.stream = null; }
+    if (voice.ctx) { voice.ctx.close(); voice.ctx = null; }
+    $("#btn-mic").classList.remove("active");
+    $("#bars").classList.remove("on");
+    $("#caption").classList.remove("on");
+    setReactor("idle");
+    setBars(0);
+  }
+
+  function beginTurn() {
+    if (!voice.session) return;
+    voice.chunks = [];
+    voice.silenceFor = 0;
+    voice.speechFor = 0;
+    // fresh recorder per turn; reuse the stream
+    let mime = "";
+    for (const m of ["audio/webm", "audio/ogg", "audio/mp4"]) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) { mime = m; break; }
+    }
+    try {
+      voice.recorder = new MediaRecorder(voice.stream, mime ? { mimeType: mime } : undefined);
+    } catch (e) { toast("Recorder error: " + e.message); return; }
+    voice.recorder.ondataavailable = (e) => { if (e.data.size) voice.chunks.push(e.data); };
+    voice.recorder.onstop = () => sendTurn();
+    voice.recorder.start();
+    setReactor("listening");
+    showCaption("", true);
+    if (voice.levelTimer) clearInterval(voice.levelTimer);
+    voice.levelTimer = setInterval(levelTick, LEVEL_INTERVAL_MS);
+  }
+
+  function stopTurn(send) {
+    if (voice.levelTimer) { clearInterval(voice.levelTimer); voice.levelTimer = null; }
+    if (voice.recorder && voice.recorder.state !== "inactive") {
+      if (!send) voice.recorder.onstop = null;
+      try { voice.recorder.stop(); } catch (e) {}
+    }
+  }
+
+  function levelTick() {
+    if (!voice.analyser) return;
+    const buf = new Uint8Array(voice.analyser.fftSize);
+    voice.analyser.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    // mic is deaf while speaking — don't meter or end the turn on our own voice
+    if (voice.speaking) { setBars(0); return; }
+    setBars(rms);
+    reactor.level = Math.min(1, rms * 6);
+    if (rms >= SILENCE_THRESHOLD) {
+      voice.speechFor += LEVEL_INTERVAL_MS;
+      voice.silenceFor = 0;
+    } else {
+      voice.silenceFor += LEVEL_INTERVAL_MS;
+    }
+    if (voice.speechFor >= MIN_SPEECH_MS && voice.silenceFor >= SILENCE_MS) {
+      stopTurn(true); // triggers recorder.onstop -> sendTurn
+    }
+  }
+
+  function setBars(rms) {
+    if (!voice.bars) return;
+    const n = voice.bars.length;
+    for (let i = 0; i < n; i++) {
+      const d = 1 - Math.abs(i - (n - 1) / 2) / (n / 2);
+      const h = 4 + Math.min(1, rms * 6) * 20 * (0.5 + d) * (0.6 + Math.random() * 0.4);
+      voice.bars[i].style.height = h.toFixed(1) + "px";
+    }
+  }
+
+  async function sendTurn() {
+    const blob = new Blob(voice.chunks, { type: (voice.recorder && voice.recorder.mimeType) || "audio/webm" });
+    if (!blob.size) { if (voice.session) beginTurn(); return; }
+    setReactor("thinking");
+    try {
+      const r = await fetch("/api/listen", {
+        method: "POST", headers: { "Content-Type": blob.type }, body: blob });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+      const { transcript } = await r.json();
+      if (!transcript || !transcript.trim()) {
+        showCaption("(didn't catch that)", false);
+        if (voice.session) beginTurn();
+        return;
+      }
+      showCaption(transcript, false);
+      const res = await (await api("/api/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: transcript, history: [] }),
+      })).json();
+      await handleReplyVoiced(res);
+    } catch (e) {
+      toast("Transcription failed: " + e.message);
+      setReactor("idle");
+      if (voice.session) beginTurn();
+    }
+  }
+
+  async function handleReplyVoiced(res) {
+    // show the card + spoken text (shared with the text path)
+    handleReply(res);
+    if (res.spoken && voiceAvailable) {
+      await speakOut(res.spoken);
+    }
+    // continuous: next turn, no wake word
+    if (voice.session) beginTurn();
+  }
+
+  async function speakOut(text) {
+    stopSpeaking();
+    setReactor("speaking");
+    voice.speaking = true; // mic deaf
+    if (voice.stream) voice.stream.getAudioTracks().forEach((t) => (t.enabled = false));
+    try {
+      const r = await fetch("/api/speak", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+      const buf = await r.arrayBuffer();
+      const url = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+      await new Promise((resolve) => {
+        const a = new Audio(url);
+        voice.audioEl = a;
+        a.onended = a.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        a.play().catch(() => resolve());
+      });
+    } catch (e) {
+      toast("Speech failed: " + e.message);
+    } finally {
+      voice.speaking = false;
+      if (voice.stream) voice.stream.getAudioTracks().forEach((t) => (t.enabled = true));
+      voice.audioEl = null;
+    }
+  }
+
+  function stopSpeaking() {
+    if (voice.audioEl) { try { voice.audioEl.pause(); } catch (e) {} voice.audioEl = null; }
+    voice.speaking = false;
+    if (voice.stream) voice.stream.getAudioTracks().forEach((t) => (t.enabled = true));
+  }
+
+  // Barge-in: an explicit action — mic button, Space, or Esc. Stops JARVIS
+  // talking immediately and hands the turn back.
+  function bargeIn() {
+    if (voice.speaking) {
+      stopSpeaking();
+      if (voice.session) beginTurn();
+      return true;
+    }
+    return false;
+  }
+
+  function showCaption(text, interim) {
+    const c = $("#caption");
+    if (!text && interim) { c.innerHTML = '<span class="interim">listening…</span>'; c.classList.add("on"); return; }
+    if (!text) { c.classList.remove("on"); return; }
+    c.textContent = text;
+    c.classList.add("on");
+    clearTimeout(showCaption._t);
+    showCaption._t = setTimeout(() => c.classList.remove("on"), 6000);
+  }
+
   // ---------- helpers ----------
   function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, (c) =>
@@ -248,11 +471,27 @@
       const f = prompt("Remember what? (JARVIS will say back exactly what it wrote)");
       if (f) ask("remember: " + f);
     });
-    $("#btn-mic").addEventListener("click", () => toast("Voice is added in build step 4."));
-    $("#btn-mute").addEventListener("click", () => { setReactor("idle"); });
+    // mic toggles a listening session; mute/Esc is barge-in + stop
+    $("#btn-mic").addEventListener("click", () => {
+      if (voice.session) stopSession(); else startSession();
+    });
+    $("#btn-mute").addEventListener("click", () => {
+      if (!bargeIn()) stopSession();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.target === $("#ask-input")) return; // don't hijack typing
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (bargeIn()) return;
+        if (voice.session) stopSession(); else startSession();
+      } else if (e.code === "Escape") {
+        if (!bargeIn()) stopSession();
+      }
+    });
 
-    // expose for step 4
-    window.JARVIS_UI = { setReactor, reactor, ask, toast, handleReply, api };
+    // expose for debugging / tests
+    window.JARVIS_UI = { setReactor, reactor, ask, toast, handleReply, api,
+                         voice, startSession, stopSession, stopTurn };
   }
 
   document.addEventListener("DOMContentLoaded", boot);
