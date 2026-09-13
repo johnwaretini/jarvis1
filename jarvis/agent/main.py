@@ -30,6 +30,28 @@ HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parent
 UI_DIR = PROJECT / "ui"
 
+def _load_env() -> None:
+    """Load PROJECT/.env into os.environ (stdlib only, no dependency).
+
+    Real values already in the environment win, so `KEY=... python3 ...` still
+    overrides the file. The .env file holds the ElevenLabs / model keys and is
+    gitignored + chmod 600 — nothing here ever hands a key to the browser.
+    """
+    env_path = PROJECT / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip().strip('"').strip("'")
+        os.environ.setdefault(key, val)
+
+
+_load_env()
+
 sys.path.insert(0, str(HERE))
 import data  # noqa: E402  (local module, after sys.path tweak)
 

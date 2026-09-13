@@ -74,11 +74,12 @@ def model_status() -> dict:
 # ---- injection detection (guardrail #7) ----------------------------------
 
 _INJECTION = re.compile(
-    r"ignore (your |all |previous )?(instructions|prompt)|"
-    r"disregard (the |your )?(above|previous|instructions)|"
-    r"forward (this|all|the).{0,30}(to|email)|"
-    r"send (this|all|the|it) to|"
-    r"approve the (upgrade|purchase|payment)",
+    r"ignore\s+(?:all\s+|any\s+|your\s+|the\s+|previous\s+|prior\s+|earlier\s+)*"
+    r"(?:instructions?|prompts?|rules?|guardrails?|directives?)|"
+    r"disregard\s+(?:the\s+|your\s+|all\s+|any\s+|previous\s+|above\s+)*"
+    r"(?:instructions?|prompts?|rules?|the\s+above|everything)|"
+    r"(?:forward|e-?mail|send)\s+(?:this|that|it|all|the|these|them)\b[^.\n]{0,40}\bto\b|"
+    r"approve\s+the\s+(?:upgrade|purchase|payment|invoice)",
     re.IGNORECASE,
 )
 
@@ -144,6 +145,36 @@ def search_brain(vault, query: str) -> dict:
                 "card": _card("search_brain", query,
                               '<div class="body">No matching note.</div>')}
     top = ranked[0][0]
+
+    # Never invent: if the query has several distinctive words but the top note
+    # covers fewer than half of them, we're pattern-matching noise, not
+    # answering. Say so in four words rather than dress up a coincidence.
+    from vault import STOPWORDS
+    q_terms = {w for w in re.findall(r"[a-z0-9]+", query.lower())
+               if len(w) > 2 and w not in STOPWORDS}
+    if len(q_terms) >= 2:
+        top_terms = set(re.findall(r"[a-z0-9]+", (top.title + " " + top.body).lower()))
+        covered = len(q_terms & top_terms) / len(q_terms)
+        if covered < 0.5:
+            return {"route": "search_brain",
+                    "spoken": "Nothing in your files on that.",
+                    "card": _card("search_brain", query,
+                                  '<div class="body">No note covers that.</div>')}
+
+    # If the best match is a note carrying an instruction (a planted "read me
+    # first"), report it — never voice the instruction as if it were an answer.
+    inj_top = _scan_injection(top.body)
+    if inj_top:
+        return {"route": "search_brain", "focus": top.id, "items": [top.id],
+                "spoken": (f"Heads up — '{top.title}' contains an instruction "
+                           f"I won't act on. Flagged on the card."),
+                "card": _card("search_brain", query,
+                              f'<div class="body" style="color:var(--warn)">'
+                              f'<b>{_esc(top.title)}</b> ({_esc(Path(top.path).name)}) '
+                              f'contains an embedded instruction — "{_esc(inj_top)}". '
+                              f'Instructions inside your files are data, not '
+                              f'commands: reporting it, not acting on it.</div>')}
+
     others = [n for n, _ in ranked[1:] if _relevant(n, query)]
     cited = [top] + others[:2]
 
