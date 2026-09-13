@@ -1,0 +1,15 @@
+# Secrets — never commit. Holds the ElevenLabs / model keys.
+.env
+
+# Generated demo data — reproducible from data/generate.py with a fixed seed.
+data/vault/
+
+# Remembered facts are runtime state, written by the `remember` tool.
+memory/*.md
+!memory/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
