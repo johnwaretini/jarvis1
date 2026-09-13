@@ -1,0 +1,55 @@
+<!-- JARVIS UI — four regions floating over a full-screen canvas. -->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JARVIS</title>
+<link rel="stylesheet" href="/ui/styles.css" />
+
+<canvas id="canvas"></canvas>
+
+<div id="badges">
+  <span class="badge" id="badge-mode">…</span>
+  <span class="badge" id="badge-model" hidden></span>
+</div>
+<div id="toast"></div>
+
+<!-- LEFT: inspector + hubs -->
+<section class="panel" id="left">
+  <h2>Inspector</h2>
+  <div id="inspector">
+    <div class="empty">Click a node to open it.<br />Shift-click a second to trace the shortest path between them.</div>
+  </div>
+  <h2>Top hubs</h2>
+  <div id="hubs"></div>
+</section>
+
+<!-- RIGHT: filters + reactor -->
+<section class="panel" id="right">
+  <h2>Filter by type</h2>
+  <div id="filters"></div>
+</section>
+
+<div id="reactor-wrap">
+  <canvas id="reactor" width="300" height="300"></canvas>
+  <div id="reactor-label">idle</div>
+</div>
+
+<!-- spoken line + caption -->
+<div id="spoken"></div>
+<div id="caption"></div>
+
+<!-- BOTTOM: ask bar -->
+<section class="panel" id="ask">
+  <div id="bars">
+    <span></span><span></span><span></span><span></span><span></span>
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <input id="ask-input" autocomplete="off" placeholder="Ask me anything…" />
+  <button class="iconbtn" id="btn-mic"    title="Talk (Space)">🎙</button>
+  <button class="iconbtn danger" id="btn-mute" title="Barge-in / stop (Esc)">⏹</button>
+  <button class="iconbtn" id="btn-brief"  title="Brief me">▤</button>
+  <button class="iconbtn" id="btn-plan"   title="Plan my day">◷</button>
+  <button class="iconbtn" id="btn-memory" title="Remember…">✶</button>
+</section>
+
+<script src="/ui/graph.js"></script>
+<script src="/ui/app.js"></script>

@@ -24,6 +24,8 @@ TEXT_EXT = {".md", ".markdown", ".txt"}
 PDF_EXT = {".pdf"}
 
 WIKILINK = re.compile(r"\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]")
+FRONT_BLOCK = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+LEAD_H1 = re.compile(r"^\s*#\s+.*\n")
 FRONT_TYPE = re.compile(r"^---\s*\n.*?\btype:\s*([^\n]+).*?\n---", re.DOTALL)
 FRONT_TITLE = re.compile(r"^---\s*\n.*?\btitle:\s*([^\n]+).*?\n---", re.DOTALL)
 WORD = re.compile(r"[a-z0-9£$]+")
@@ -41,6 +43,12 @@ class Note:
     degree: int = 0       # total connections (in + out), for node radius
     note: str = ""        # indexing remark, e.g. "pdf: could not extract text"
 
+    def clean_body(self) -> str:
+        """Body without YAML frontmatter or the redundant leading # heading."""
+        text = FRONT_BLOCK.sub("", self.body, count=1)
+        text = LEAD_H1.sub("", text, count=1)
+        return text.strip()
+
     def to_public(self) -> dict:
         """Card-safe view: no absolute path leaks to the browser."""
         return {
@@ -49,7 +57,7 @@ class Note:
             "type": self.type,
             "degree": self.degree,
             "links": self.links,
-            "excerpt": self.body[:280],
+            "excerpt": self.clean_body()[:280],
             "note": self.note,
         }
 
