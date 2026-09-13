@@ -29,6 +29,16 @@ LEAD_H1 = re.compile(r"^\s*#\s+.*\n")
 FRONT_TYPE = re.compile(r"^---\s*\n.*?\btype:\s*([^\n]+).*?\n---", re.DOTALL)
 FRONT_TITLE = re.compile(r"^---\s*\n.*?\btitle:\s*([^\n]+).*?\n---", re.DOTALL)
 WORD = re.compile(r"[a-z0-9£$]+")
+STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "of", "to",
+    "in", "on", "at", "for", "and", "or", "but", "with", "as", "by", "it",
+    "its", "this", "that", "these", "those", "i", "me", "my", "we", "our",
+    "you", "your", "he", "she", "they", "them", "what", "which", "who", "whom",
+    "how", "when", "where", "why", "do", "does", "did", "can", "could", "will",
+    "would", "should", "about", "from", "into", "up", "down", "so", "if",
+    "then", "than", "there", "here", "not", "no", "yes", "have", "has", "had",
+    "get", "got", "any", "some", "all", "one", "us", "am",
+}
 
 
 @dataclass
@@ -167,7 +177,7 @@ class Vault:
         for note in self.notes.values():
             counts: dict[str, int] = {}
             for w in WORD.findall((note.title + " " + note.body).lower()):
-                if len(w) < 2:
+                if len(w) < 2 or w in STOPWORDS:
                     continue
                 counts[w] = counts.get(w, 0) + 1
             for w, c in counts.items():
@@ -176,7 +186,8 @@ class Vault:
     def search(self, query: str, limit: int = 8) -> list[tuple[Note, float]]:
         """Score notes against the query. Used by search_brain AND by the
         model-free router to decide conversation vs. lookup."""
-        q_terms = [w for w in WORD.findall(query.lower()) if len(w) >= 2]
+        q_terms = [w for w in WORD.findall(query.lower())
+                   if len(w) >= 2 and w not in STOPWORDS]
         if not q_terms:
             return []
         scores: dict[str, float] = {}

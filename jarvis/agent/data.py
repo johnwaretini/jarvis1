@@ -13,6 +13,7 @@ ever want to audit what JARVIS can read, read exactly this file.
 """
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from vault import Vault, build_vault
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parent
 DEMO_VAULT = PROJECT / "data" / "vault"
+DEMO_INBOX = PROJECT / "data" / "inbox.json"
+DEMO_CALENDAR = PROJECT / "data" / "calendar.json"
 
 # --- Your real folders -----------------------------------------------------
 # Only read when JARVIS_DEMO=0. Absolute paths. Edit this list to point at
@@ -66,6 +69,28 @@ def describe_source() -> dict:
 def load_vault() -> Vault:
     roots = data_roots()
     return build_vault(roots)
+
+
+def load_inbox() -> tuple[list[dict], str | None]:
+    """Returns (messages, error). Real mode has no configured source yet, so it
+    degrades loudly rather than inventing mail."""
+    if is_demo():
+        try:
+            return json.loads(DEMO_INBOX.read_text(encoding="utf-8")), None
+        except FileNotFoundError:
+            return [], "demo inbox missing — run data/generate.py"
+    return [], ("no real inbox source configured — wire an IMAP/Maildir reader "
+                "in data.py, or stay in demo mode")
+
+
+def load_calendar() -> tuple[list[dict], str | None]:
+    if is_demo():
+        try:
+            return json.loads(DEMO_CALENDAR.read_text(encoding="utf-8")), None
+        except FileNotFoundError:
+            return [], "demo calendar missing — run data/generate.py"
+    return [], ("no real calendar source configured — wire a CalDAV/ICS reader "
+                "in data.py, or stay in demo mode")
 
 
 def _report() -> None:

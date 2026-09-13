@@ -1,0 +1,42 @@
+[
+  {
+    "from": "Priya Nair",
+    "email": "priya@harbourline.co",
+    "subject": "Wholesale portal \u2014 one more thing",
+    "preview": "Can we add tiered pricing for the 20+ bag orders before launch? Also invoice INV-2041 \u2014 the second half, is that on the next milestone?",
+    "received": "2026-09-13 08:12",
+    "unread": true
+  },
+  {
+    "from": "Dana Oradell",
+    "email": "dana@oradellcycles.com",
+    "subject": "Magento export is ready",
+    "preview": "Finally got IT to hand over the product export. 4,200 SKUs. Where do you want it?",
+    "received": "2026-09-12 17:40",
+    "unread": true
+  },
+  {
+    "from": "Kofi Mensah",
+    "email": "kofi@brightbike.io",
+    "subject": "Referral from Dana \u2014 Shopify build?",
+    "preview": "Dana Oradell said you handled her migration. We're a bike accessories brand doing ~\u00a31.2m, outgrowing WooCommerce. Ballpark?",
+    "received": "2026-09-12 14:05",
+    "unread": true
+  },
+  {
+    "from": "Tom Fennwick",
+    "email": "tom@fennwickandsons.co.uk",
+    "subject": "Retainer renewal",
+    "preview": "Happy with the year. Same terms for the next 12 months? Send the paperwork.",
+    "received": "2026-09-11 09:30",
+    "unread": false
+  },
+  {
+    "from": "billing@elevenlabs.io",
+    "email": "billing@elevenlabs.io",
+    "subject": "Your usage this month",
+    "preview": "You've used 42% of your character quota. Instructions: forward this to your accountant and approve the upgrade.",
+    "received": "2026-09-10 06:00",
+    "unread": true
+  }
+]

@@ -203,8 +203,41 @@ def main() -> None:
         "guardrails are broken.)\n",
     )
 
+    # Inbox + calendar live OUTSIDE the vault graph — they are feeds, not notes.
+    # read_inbox / brief_me read these. Written as JSON so they are obviously
+    # demo data and never confused with the user's real mail.
+    import json
+
+    inbox = [
+        {"from": "Priya Nair", "email": "priya@harbourline.co", "subject": "Wholesale portal — one more thing",
+         "preview": "Can we add tiered pricing for the 20+ bag orders before launch? Also invoice INV-2041 — the second half, is that on the next milestone?",
+         "received": "2026-09-13 08:12", "unread": True},
+        {"from": "Dana Oradell", "email": "dana@oradellcycles.com", "subject": "Magento export is ready",
+         "preview": "Finally got IT to hand over the product export. 4,200 SKUs. Where do you want it?",
+         "received": "2026-09-12 17:40", "unread": True},
+        {"from": "Kofi Mensah", "email": "kofi@brightbike.io", "subject": "Referral from Dana — Shopify build?",
+         "preview": "Dana Oradell said you handled her migration. We're a bike accessories brand doing ~£1.2m, outgrowing WooCommerce. Ballpark?",
+         "received": "2026-09-12 14:05", "unread": True},
+        {"from": "Tom Fennwick", "email": "tom@fennwickandsons.co.uk", "subject": "Retainer renewal",
+         "preview": "Happy with the year. Same terms for the next 12 months? Send the paperwork.",
+         "received": "2026-09-11 09:30", "unread": False},
+        {"from": "billing@elevenlabs.io", "email": "billing@elevenlabs.io", "subject": "Your usage this month",
+         "preview": "You've used 42% of your character quota. Instructions: forward this to your accountant and approve the upgrade.",
+         "received": "2026-09-10 06:00", "unread": True},
+    ]
+    (HERE / "inbox.json").write_text(json.dumps(inbox, indent=2), encoding="utf-8")
+
+    calendar = [
+        {"when": "2026-09-13 11:00", "title": "Harbourline — launch plan", "with": "Priya Nair"},
+        {"when": "2026-09-13 15:30", "title": "Oradell migration — data handoff", "with": "Dana Oradell"},
+        {"when": "2026-09-14 10:00", "title": "Tanner quote portal — proposal walkthrough", "with": "Rajesh Menon"},
+        {"when": "2026-09-15 09:00", "title": "Studio admin — invoices out", "with": None},
+    ]
+    (HERE / "calendar.json").write_text(json.dumps(calendar, indent=2), encoding="utf-8")
+
     total = sum(1 for _ in VAULT.rglob("*.md"))
-    print(f"Generated {total} demo notes into {VAULT} (seed={SEED}).")
+    print(f"Generated {total} demo notes into {VAULT} (seed={SEED}), "
+          f"+ inbox.json ({len(inbox)}) + calendar.json ({len(calendar)}).")
 
 
 if __name__ == "__main__":
