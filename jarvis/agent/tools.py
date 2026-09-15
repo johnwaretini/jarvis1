@@ -496,6 +496,8 @@ _OPINION = re.compile(r"what do you think|your (opinion|view|take)|should i\b|"
                       r"do you reckon|thoughts\??$", re.IGNORECASE)
 _WHY = re.compile(r"^\s*(why|how come|says who|really\??)\s*\??\s*$", re.IGNORECASE)
 _WHOAMI = re.compile(r"who are you|what are you|your name", re.IGNORECASE)
+_WHOFOR = re.compile(r"who do you work for|whose assistant|who do you serve|"
+                     r"^\s*who am i\b|what do you know about me", re.IGNORECASE)
 _CANDO = re.compile(r"what can you do|help$|what do you do|how do you work", re.IGNORECASE)
 
 SCORE_THRESHOLD = 6.0   # tune: below this a query is treated as chat, not lookup
@@ -534,7 +536,7 @@ def classify(text: str, history: list, vault) -> dict:
 
     # small talk / meta — never a tool, never a search result
     if _GREETING.search(t) or _HEARME.search(t) or _THANKS.search(t) or \
-       _OPINION.search(t) or _WHOAMI.search(t) or _CANDO.search(t):
+       _OPINION.search(t) or _WHOAMI.search(t) or _WHOFOR.search(t) or _CANDO.search(t):
         return {"kind": "chat"}
 
     # score against files to decide talk vs. lookup
@@ -550,7 +552,8 @@ def classify(text: str, history: list, vault) -> dict:
 def converse(text: str, history: list, decision: dict, vault) -> dict:
     t = (text or "").strip()
     name = _persona_name()
-    who = f", {name}" if name else ""
+    first = name.split()[0] if name else ""
+    who = f", {first}" if first else ""
 
     if _HEARME.search(t):
         base = "Loud and clear."
@@ -558,6 +561,9 @@ def converse(text: str, history: list, decision: dict, vault) -> dict:
         base = f"Go ahead{who}."
     elif _THANKS.search(t):
         base = "Anytime."
+    elif _WHOFOR.search(t):
+        base = (f"You, {name}." if name
+                else "You. I read your files and keep your week straight.")
     elif _WHOAMI.search(t):
         base = ("JARVIS. I read your files and keep your week straight."
                 if not name else f"JARVIS — I work for you{who}.")
