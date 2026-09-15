@@ -101,14 +101,23 @@ Tune turn-taking at the top of `ui/app.js`: `SILENCE_THRESHOLD`, `SILENCE_MS`,
 
 ---
 
-## The model (optional)
+## The model / "brain" (optional)
 
-JARVIS runs **without any model**. With no `ANTHROPIC_API_KEY`, it decides
-between conversation and a file lookup by scoring your question against your
-files, and shows a **MODEL MISSING** badge — keyword routing is never passed
-off as the model talking. Set `ANTHROPIC_API_KEY` in `.env` and the model
-phrases spoken lines in your tone (from `CLAUDE.md`); tools still run
-deterministically, so the answer's facts always come from your files.
+JARVIS runs **without any model**. With no key, it decides between conversation
+and a file lookup by scoring your question against your files, and shows a
+**MODEL MISSING** badge — keyword routing is never passed off as the model
+talking. A brain only **phrases the spoken line in your tone** (from
+`CLAUDE.md`); routing and tools always run deterministically, so the answer's
+facts always come from your files. Two providers, pick one:
+
+- **Gemini (free)** — Google's free tier, no credit card. Get a key at
+  [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey),
+  put `GEMINI_API_KEY=...` in `.env`, restart. Optional model override:
+  `JARVIS_GEMINI_MODEL` (default `gemini-2.0-flash`).
+- **Anthropic (paid)** — key starts with `sk-ant-`, from
+  [console.anthropic.com](https://console.anthropic.com). Set `ANTHROPIC_API_KEY`.
+
+If both are set, Anthropic wins. The key stays server-side — never in the browser.
 
 ---
 
@@ -166,8 +175,9 @@ speaking); and a bottom **ask bar**.
 - **Voice (ElevenLabs):** their usage-based pricing. TTS is billed per
   character, Scribe per minute of audio; a free tier exists for trying it. Voice
   runs only when you set `ELEVENLABS_API_KEY`. See elevenlabs.io/pricing.
-- **Model (Anthropic, optional):** their per-token pricing, and only when you
-  set `ANTHROPIC_API_KEY`. Used only to word spoken lines; leave it unset to run
+- **Brain (optional):** **free** with Google Gemini's free tier
+  (`GEMINI_API_KEY`, no card), or Anthropic per-token pricing
+  (`ANTHROPIC_API_KEY`). Used only to word spoken lines; leave both unset to run
   free. See anthropic.com/pricing.
 
 You control both switches. Nothing here spends money you didn't opt into.

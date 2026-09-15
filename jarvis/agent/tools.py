@@ -60,15 +60,27 @@ def _persona_name() -> str:
 
 _MODEL_RUNTIME_OK = True   # flipped off if a live call fails, so we degrade loudly
 
+# The phrasing model only rewords the spoken line in the user's tone; routing
+# (talk vs. which tool) is ALWAYS file-scoring, with or without a model. Two
+# providers are supported: Anthropic (paid) and Google Gemini (free tier).
+def _provider() -> str:
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        return "anthropic"
+    if os.environ.get("GEMINI_API_KEY", "").strip():
+        return "gemini"
+    return ""
+
 def model_status() -> dict:
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
-        return {"available": False,
-                "reason": "no model key — routing falls back to file-scoring"}
+    prov = _provider()
+    if not prov:
+        return {"available": False, "provider": None,
+                "reason": "no model key — spoken lines use built-in phrasing"}
     if not _MODEL_RUNTIME_OK:
-        return {"available": False,
-                "reason": "model key set but last call failed — using file-scoring"}
-    return {"available": True, "reason": "model key set"}
+        return {"available": False, "provider": prov,
+                "reason": f"{prov} key set but last call failed — built-in phrasing"}
+    label = {"anthropic": "Anthropic", "gemini": "Gemini (free tier)"}[prov]
+    return {"available": True, "provider": prov,
+            "reason": f"{label} — phrasing spoken lines in your tone"}
 
 
 # ---- injection detection (guardrail #7) ----------------------------------
@@ -635,21 +647,52 @@ def _followup(decision, history, last, vault) -> dict:
 def _phrase(instruction: str, fallback: str) -> str:
     """Phrase a spoken line in the user's tone using the model, if available.
     Otherwise return the deterministic fallback. Never invents facts — the
-    instruction carries the facts; the model only rewords."""
-    if not model_status()["available"]:
+    instruction carries the facts; the model only rewords.
+
+    Works with either provider (Anthropic or free Gemini). If the call fails,
+    it flips the runtime flag so the UI degrades loudly to built-in phrasing."""
+    global _MODEL_RUNTIME_OK
+    prov = _provider()
+    if not prov or not _MODEL_RUNTIME_OK:
         return fallback
+    system = (CLAUDE_MD + "\n\n" + PROMPT_MD +
+              "\n\nYou are wording ONE spoken line. Use only the facts in "
+              "the instruction. Do not add numbers, names, or claims. Reply "
+              "with the line only, no quotes.")
     try:
-        system = (CLAUDE_MD + "\n\n" + PROMPT_MD +
-                  "\n\nYou are wording ONE spoken line. Use only the facts in "
-                  "the instruction. Do not add numbers, names, or claims. Reply "
-                  "with the line only, no quotes.")
-        out = _call_model(system, [{"role": "user", "content": instruction}], max_tokens=120)
+        if prov == "anthropic":
+            out = _call_model(system, [{"role": "user", "content": instruction}], max_tokens=120)
+        else:
+            out = _call_gemini(system, instruction, max_tokens=120)
         line = (out or "").strip().strip('"')
         return line or fallback
     except Exception:
-        global _MODEL_RUNTIME_OK
         _MODEL_RUNTIME_OK = False
         return fallback
+
+
+def _call_gemini(system: str, user_text: str, max_tokens: int = 120) -> str:
+    """Google Gemini (free tier) — stdlib HTTP, key held server-side only.
+    Free key from https://aistudio.google.com/app/apikey (no card needed)."""
+    key = os.environ["GEMINI_API_KEY"].strip()
+    model = os.environ.get("JARVIS_GEMINI_MODEL", "gemini-2.0-flash")
+    url = ("https://generativelanguage.googleapis.com/v1beta/models/"
+           + urllib.parse.quote(model) + ":generateContent")
+    body = json.dumps({
+        "system_instruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": user_text}]}],
+        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7},
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={"content-type": "application/json", "x-goog-api-key": key})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        payload = json.loads(r.read())
+    cands = payload.get("candidates", [])
+    if not cands:
+        return ""
+    parts = cands[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts)
 
 
 def _call_model(system: str, messages: list, max_tokens: int = 300) -> str:
