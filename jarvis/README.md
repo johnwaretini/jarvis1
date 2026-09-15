@@ -21,6 +21,13 @@ work out of the box. Voice needs a key (below).
 
 > Python 3.10+ (uses modern type hints). Nothing to `pip install`.
 
+### No terminal? (macOS)
+
+Double-click **`launch-jarvis.command`** in Finder. It builds the demo graph on
+first run, starts the server, and opens your browser — no commands to type.
+Leave the little window open while you use JARVIS; close it (or `Ctrl-C`) to
+stop. If macOS blocks the first open, right-click it → **Open** → **Open**.
+
 ---
 
 ## The demo switch — you opt *in* to your real life
